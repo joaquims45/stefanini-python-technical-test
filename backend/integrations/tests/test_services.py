@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from integrations.clients.base import SourceTimeoutError, SourceUnavailableError
@@ -73,6 +75,34 @@ class TestSyncSource:
         assert sync_run.records_count == 0
         assert "timeout simulado" in sync_run.error_message
         assert Item.objects.count() == 0
+
+    def test_sucesso_emite_log_estruturado_com_duracao(self, caplog):
+        client = FakeClient(
+            Source.OPEN_BREWERY_DB,
+            items=[make_item(Source.OPEN_BREWERY_DB, "1", "Cervejaria A")],
+        )
+
+        with caplog.at_level(logging.INFO, logger="integrations.sync"):
+            sync_source(client)
+
+        [record] = caplog.records
+        assert record.source == Source.OPEN_BREWERY_DB
+        assert record.success is True
+        assert record.records_count == 1
+        assert record.duration_ms >= 0
+
+    def test_falha_emite_log_estruturado_com_erro(self, caplog):
+        client = FakeClient(
+            Source.BRASILAPI_FERIADOS, error=SourceUnavailableError("fora do ar")
+        )
+
+        with caplog.at_level(logging.INFO, logger="integrations.sync"):
+            sync_source(client)
+
+        [record] = caplog.records
+        assert record.success is False
+        assert record.error_message == "fora do ar"
+        assert record.duration_ms >= 0
 
     def test_falha_nao_apaga_itens_de_sync_anterior_bem_sucedida(self):
         client_ok = FakeClient(

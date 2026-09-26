@@ -37,7 +37,8 @@ class TestItemsEndpoint:
         response = api_client.get("/items")
 
         assert response.status_code == 200
-        assert len(response.data) == 2
+        assert response.data["count"] == 2
+        assert len(response.data["results"]) == 2
 
     def test_filtra_itens_por_fonte(self, api_client):
         make_item(Source.BRASILAPI_FERIADOS, "2026-01-01", "Ano Novo")
@@ -46,8 +47,24 @@ class TestItemsEndpoint:
         response = api_client.get("/items", {"source": Source.OPEN_BREWERY_DB})
 
         assert response.status_code == 200
-        assert len(response.data) == 1
-        assert response.data[0]["source"] == Source.OPEN_BREWERY_DB
+        assert response.data["count"] == 1
+        assert response.data["results"][0]["source"] == Source.OPEN_BREWERY_DB
+
+    def test_pagina_quando_ha_mais_itens_que_o_tamanho_de_pagina(self, api_client):
+        for i in range(25):
+            make_item(Source.OPEN_BREWERY_DB, str(i), f"Cervejaria {i}")
+
+        primeira_pagina = api_client.get("/items")
+        segunda_pagina = api_client.get("/items", {"page": 2})
+
+        assert primeira_pagina.data["count"] == 25
+        assert len(primeira_pagina.data["results"]) == 20
+        assert primeira_pagina.data["next"] is not None
+        assert primeira_pagina.data["previous"] is None
+
+        assert len(segunda_pagina.data["results"]) == 5
+        assert segunda_pagina.data["next"] is None
+        assert segunda_pagina.data["previous"] is not None
 
 
 @pytest.mark.django_db

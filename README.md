@@ -80,6 +80,14 @@ mockadas. Não há necessidade de container para isso: containerizar os testes
 não muda o resultado e adiciona complexidade que o enunciado pede para
 evitar.
 
+Um segundo grupo de testes, marcado `external_api`, pega as APIs públicas de
+verdade (não mocks) para detectar mudança de formato — fica de fora do run
+acima de propósito (precisaria de internet) e é opt-in:
+
+```bash
+pytest -m external_api --run-external
+```
+
 ### Frontend sem Docker
 
 Requer o SDK do Flutter instalado.
@@ -188,12 +196,42 @@ sobe a tela funcionando em `http://localhost:8080` de ponta a ponta (testado
 durante o desenvolvimento), não foi anexado print — abrir a URL localmente
 substitui a comprovação.
 
+**Paginação em `/items` via `PageNumberPagination` global.** `PAGE_SIZE = 20`
+em `REST_FRAMEWORK` (settings), aplicado automaticamente por ser
+`ListAPIView`. `GET /health` não pagina — é uma lista curta e fixa (uma
+entrada por fonte configurada), paginar não faria sentido ali.
+
+**Log estruturado (JSON) em vez de métrica separada.** Cada `sync_source`
+emite uma linha JSON (`integrations/logging_utils.py`) com `source`,
+`success`, `records_count` e `duration_ms` (calculado a partir de
+`started_at`/`finished_at`, já persistidos no `SyncRun`). Alternativa
+descartada: expor a duração como um endpoint/métrica Prometheus separado —
+mais infraestrutura do que o exercício pede; o log já é suficiente para
+observar duração por integração via `docker compose logs`.
+
+**Teste de contrato contra a API real é opt-in, não roda no `pytest` padrão
+nem no CI.** `integrations/tests/test_external_contract.py` chama as duas
+APIs de verdade e valida o formato mínimo esperado (chaves, tipos) — é o
+jeito de detectar uma mudança de formato que o parsing atual não capturaria
+como erro. Fica marcado `external_api` e é pulado por padrão (ver
+`conftest.py`), porque o enunciado exige que a suite principal rode sem
+internet; roda sob demanda com `pytest -m external_api --run-external`.
+
+**CI só valida a suíte offline.** O workflow (`.github/workflows/tests.yml`)
+roda o `pytest` padrão (SQLite, sem chamadas externas) — de propósito não
+inclui os testes `external_api`, que dependem de internet e de fontes de
+terceiros nem sempre estáveis; rodá-los em todo push tornaria o CI instável
+por motivos alheios ao código.
+
 ## O que foi deixado de fora (fora de escopo, por decisão)
 
 Seguindo a lista de "fora de escopo" do enunciado: sem autenticação, sem
 interface web além da tela Flutter, sem deploy em nuvem, sem meta de
-cobertura de testes, sem filas/mensageria. Dos itens de "se sobrar tempo",
-foi feito o `docker-compose` completo (pedido explicitamente pelo
-solicitante do teste); paginação em `/items`, CI e log estruturado não
-foram implementados por não terem sobrado como prioridade dentro do
-orçamento de tempo.
+cobertura de testes, sem filas/mensageria.
+
+Dos itens de "se sobrar tempo" (opcionais, sem peso na avaliação), foram
+implementados: `docker-compose` completo, log estruturado com duração por
+integração, CI rodando os testes, paginação em `/items` e um teste de
+contrato contra as APIs reais. Não implementado: dashboards/alertas sobre
+as métricas de log (ficaria fora do escopo de "painel simples" que o
+enunciado pede).

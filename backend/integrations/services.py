@@ -1,9 +1,29 @@
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
 from .clients import get_all_clients
 from .clients.base import SourceError
 from .models import Item, SyncRun
+
+logger = logging.getLogger("integrations.sync")
+
+
+def _log_sync_run(sync_run: SyncRun) -> None:
+    duration_ms = round(
+        (sync_run.finished_at - sync_run.started_at).total_seconds() * 1000, 1
+    )
+    logger.info(
+        "sync_source finalizado",
+        extra={
+            "source": sync_run.source,
+            "success": sync_run.success,
+            "records_count": sync_run.records_count,
+            "duration_ms": duration_ms,
+            "error_message": sync_run.error_message,
+        },
+    )
 
 
 def sync_source(client) -> SyncRun:
@@ -19,7 +39,7 @@ def sync_source(client) -> SyncRun:
     try:
         normalized_items = client.run()
     except SourceError as exc:
-        return SyncRun.objects.create(
+        sync_run = SyncRun.objects.create(
             source=client.source,
             started_at=started_at,
             finished_at=timezone.now(),
@@ -27,6 +47,8 @@ def sync_source(client) -> SyncRun:
             records_count=0,
             error_message=str(exc),
         )
+        _log_sync_run(sync_run)
+        return sync_run
 
     with transaction.atomic():
         for data in normalized_items:
@@ -41,13 +63,15 @@ def sync_source(client) -> SyncRun:
                 },
             )
 
-    return SyncRun.objects.create(
+    sync_run = SyncRun.objects.create(
         source=client.source,
         started_at=started_at,
         finished_at=timezone.now(),
         success=True,
         records_count=len(normalized_items),
     )
+    _log_sync_run(sync_run)
+    return sync_run
 
 
 def sync_all_sources() -> list[SyncRun]:

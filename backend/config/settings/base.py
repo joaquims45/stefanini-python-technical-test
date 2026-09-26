@@ -58,6 +58,8 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
 }
 
 # Sem autenticação de usuários no escopo do teste (ver README) — libera CORS
@@ -86,3 +88,23 @@ OPEN_BREWERY_DB_URL = os.environ.get(
     "https://api.openbrewerydb.org/v1/breweries?per_page=20&page=1",
 )
 EXTERNAL_SOURCE_TIMEOUT = (3, 8)  # (connect, read) em segundos
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {"()": "integrations.logging_utils.JsonFormatter"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+        },
+    },
+    "loggers": {
+        "integrations": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+    },
+}
